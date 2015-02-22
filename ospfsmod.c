@@ -967,11 +967,11 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
 	// Support files opened with the O_APPEND flag.  To detect O_APPEND,
 	// use struct file's f_flags field and the O_APPEND bit.
 	/* EXERCISE: Your code here */
-    if (!(filp->f_flags & O_APPEND) ) {
+    if (filp->f_flags & O_APPEND) {
         #if DEBUG == 1
-            eprintk("O_APPEND is not set \n");
+            eprintk("O_APPEND is set \n");
         #endif
-        return 0;
+        *f_pos = oi->oi_size;
     }
     
 
