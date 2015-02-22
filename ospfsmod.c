@@ -472,6 +472,7 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
         if (f_pos * OSPFS_DIRENTRY_SIZE == dir_oi -> oi_size) {
             #if (DEBUG == 1)
                 eprintk("End of the entry, exit the loop\n");
+                eprintk("%d of files in the directory \n", f_pos-2);
             #endif
             r = 1;
             break;
@@ -501,6 +502,9 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
         od = (ospfs_direntry_t*) ospfs_inode_data(dir_oi, f_pos * OSPFS_DIRENTRY_SIZE);
         //if inode number is zero, ignore it and continue
         if (od -> od_ino == 0) {
+        #if (DEBUG == 1)
+            eprintk("od_ino is 0, skip this entry\n");
+        #endif
             f_pos++;
             continue;
         }
@@ -1013,7 +1017,7 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
         
         if (copy_from_user(buffer, data, n) != 0) {
             #if DEBUG == 1
-                eprintk("copy to user fail \n");
+                eprintk("copy from user fail \n");
             #endif
             retval = -EFAULT; // Replace these lines
             goto done;
