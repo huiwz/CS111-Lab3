@@ -469,7 +469,7 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		 * the loop.  For now we do this all the time.
 		 *
 		 * EXERCISE: Your code here */
-        if (f_pos * OSPFS_DIRENTRY_SIZE == dir_oi -> oi_size) {
+        if ((f_pos - 2) * OSPFS_DIRENTRY_SIZE == dir_oi -> oi_size) {
             #if (DEBUG == 1)
                 eprintk("End of the entry, exit the loop\n");
                 eprintk("%d of files in the directory \n", f_pos-2);
@@ -499,11 +499,11 @@ ospfs_dir_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		 */
 
 		/* EXERCISE: Your code here */
-        od = (ospfs_direntry_t*) ospfs_inode_data(dir_oi, f_pos * OSPFS_DIRENTRY_SIZE);
+        od = (ospfs_direntry_t*) ospfs_inode_data(dir_oi, (f_pos - 2)* OSPFS_DIRENTRY_SIZE);
         //if inode number is zero, ignore it and continue
         if (od -> od_ino == 0) {
         #if (DEBUG == 1)
-            eprintk("od_ino is 0, skip this entry\n");
+            eprintk("od_ino of %s is 0, skip this entry\n", od->od_name);
         #endif
             f_pos++;
             continue;
@@ -920,14 +920,14 @@ ospfs_read(struct file *filp, char __user *buffer, size_t count, loff_t *f_pos)
             n = count - amount;
         }
         else {
-            n = OSPFS_BLKSIZE;
+            n = OSPFS_BLKSIZE - (*f_pos % OSPFS_BLKSIZE);
         }
         
-        if (copy_to_user(buffer, data, n) != 0) {
+        if (copy_to_user(buffer, data+*f_pos % OSPFS_BLKSIZE, n) != 0) {
             #if DEBUG == 1
                 eprintk("copy to user fail \n");
             #endif
-            retval = -EFAULT; // Replace these lines
+            retval = -EIO; // Replace these lines
             goto done;
         }
 
@@ -1012,14 +1012,14 @@ ospfs_write(struct file *filp, const char __user *buffer, size_t count, loff_t *
             n = count - amount;
         }
         else {
-            n = OSPFS_BLKSIZE;
+            n = OSPFS_BLKSIZE - (*f_pos % OSPFS_BLKSIZE);
         }
         
-        if (copy_from_user(buffer, data, n) != 0) {
+        if (copy_from_user(data + *f_pos%OSPFS_BLKSIZE, buffer, n) != 0) {
             #if DEBUG == 1
                 eprintk("copy from user fail \n");
             #endif
-            retval = -EFAULT; // Replace these lines
+            retval = -EIO; // Replace these lines
             goto done;
         }
 
@@ -1214,17 +1214,41 @@ ospfs_create(struct inode *dir, struct dentry *dentry, int mode, struct nameidat
 static int
 ospfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 {
+    #if DEBUG == 1
+        eprintk("Creating Symbolic Link \n");
+    #endif
 	ospfs_inode_t *dir_oi = ospfs_inode(dir->i_ino);
 	uint32_t entry_ino = 0;
+    ospfs_direntry_t *od = NULL;
+    int entry_off;
 
 	/* EXERCISE: Your code here. */
-	return -EINVAL;
+    if (strlen(symname) > OSPFS_MAXNAMELEN || dentry->d_name.len > OSPFS_MAXNAMELEN) {
+        #if DEBUG == 1
+            eprintk("Name too long, symbolic link failed\n");
+        #endif
+        return -ENAMETOOLONG;
+    }
+    
+    for (entry_off = 0; entry_off < dir_oi->oi_size;
+	     entry_off += OSPFS_DIRENTRY_SIZE) {
+		od = ospfs_inode_data(dir_oi, entry_off);
+		if (od->od_ino > 0
+		    && strlen(od->od_name) == dentry->d_name.len
+		    && memcmp(od->od_name, dentry->d_name.name, dentry->d_name.len) == 0)
+                #if DEBUG == 1
+                    eprintk("The entry name has existed\n");
+                #endif
+                return -EEXIST;
+	}
+    
+    od = create_blank_direntry(dir_oi);
 
 	/* Execute this code after your function has successfully created the
 	   file.  Set entry_ino to the created file's inode number before
 	   getting here. */
 	{
-		struct inode *i = ospfs_mk_linux_inode(dir->i_sb, entry_ino);
+		struct inode *i = ospfs_mk_linux_inode(dir->i_sb, od->od_ino);
 		if (!i)
 			return -ENOMEM;
 		d_instantiate(dentry, i);
